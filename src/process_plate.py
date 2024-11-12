@@ -21,7 +21,12 @@ def process_plate_image(image_path):
         largest_contour = max(contours, key=cv2.contourArea)
         x, y, w, h = cv2.boundingRect(largest_contour)
         plate_region = resized_image[y:y + h, x:x + w]
-        extended_detected_high_res = cv2.resize(plate_region, (1000, 400), interpolation=cv2.INTER_CUBIC)
+
+        angle = get_rotation_angle(largest_contour)
+
+        rotated_plate = rotate_image(plate_region, angle)
+
+        extended_detected_high_res = cv2.resize(rotated_plate, (1000, 400), interpolation=cv2.INTER_CUBIC)
         kernel_sharpening = np.array([[-1, -1, -1],
                                       [-1, 9, -1],
                                       [-1, -1, -1]])
@@ -31,6 +36,29 @@ def process_plate_image(image_path):
         os.makedirs(output_folder, exist_ok=True)
         output_path = os.path.join(output_folder, "Plate_Enhanced.jpg")
         cv2.imwrite(output_path, sharpened_image)
+
         return output_path
 
     return None
+
+
+def get_rotation_angle(contour):
+    rect = cv2.minAreaRect(contour)
+    angle = rect[2]
+
+    if angle < -45:
+        angle = 90 + angle
+
+    if angle > 45:
+        angle -= 90
+
+    return angle
+
+
+def rotate_image(image, angle):
+    center = (image.shape[1] // 2, image.shape[0] // 2)
+    rotation_matrix = cv2.getRotationMatrix2D(center, angle, 1.0)
+
+    rotated_image = cv2.warpAffine(image, rotation_matrix, (image.shape[1], image.shape[0]))
+
+    return rotated_image

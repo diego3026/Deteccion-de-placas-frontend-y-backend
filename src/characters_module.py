@@ -25,7 +25,14 @@ def detect_plate_characters(image_path):
 
 
 def correct_plate_text(text):
-    plate_match = re.findall(r'[A-Z0-9]', text)
+    text = text.upper()
+    text = re.sub(r'[^A-Za-z0-9]', '', text)
+
+    if text.startswith('F'):
+        if len(text) > 3 and re.match(r'[A-Za-z]{3}', text[1:4]):
+            text = text[1:]
+
+    plate_match = re.findall(r'[A-Za-z0-9]', text)
 
     if len(plate_match) == 6:
         corrected_plate = []
@@ -55,4 +62,4 @@ def correct_plate_text(text):
 
         return f"{''.join(corrected_plate[:3])}-{''.join(corrected_plate[3:5])}{corrected_plate[5]}"
     else:
-        return "Formato de placa no válido"
+        return f"Texto final no válido, longitud o formato incorrecto: {text}"
