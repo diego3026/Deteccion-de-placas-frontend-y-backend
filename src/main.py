@@ -12,7 +12,7 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(OUTPUT_FOLDER, exist_ok=True)
 
 # Modelo Yolov5 preentrenado para detectar objetos como carros o motocicletas (con o sin tripulante)
-model = YOLO('yolov5s.pt')
+model = YOLO('models/yolov5s.pt')
 
 
 @app.route('/')
