@@ -1,50 +1,36 @@
 import cv2
 import numpy as np
+import os
 
-# Ruta de la imagen cargada (actualízala si es necesario)
-image_path = "output/img.png"
 
-# Cargar la imagen
-image = cv2.imread(image_path)
+def process_plate_image(image_path):
+    image = cv2.imread(image_path)
+    resized_image = cv2.resize(image, (500, 600))
 
-# Redimensionar la imagen a 500x600 píxeles
-resized_image = cv2.resize(image, (500, 600))
+    hsv_image = cv2.cvtColor(resized_image, cv2.COLOR_BGR2HSV)
 
-# Convertir la imagen redimensionada al espacio de color HSV
-hsv_image = cv2.cvtColor(resized_image, cv2.COLOR_BGR2HSV)
+    lower_yellow = np.array([20, 100, 100])
+    upper_yellow = np.array([40, 255, 255])
 
-# Definir los rangos de color amarillo en el espacio HSV
-lower_yellow = np.array([20, 100, 100])  # Límite inferior del amarillo
-upper_yellow = np.array([40, 255, 255])  # Límite superior del amarillo
+    yellow_mask = cv2.inRange(hsv_image, lower_yellow, upper_yellow)
+    kernel = np.ones((5, 5), np.uint8)
+    dilated_mask = cv2.dilate(yellow_mask, kernel, iterations=1)
+    contours, _ = cv2.findContours(dilated_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
-# Crear una máscara que detecte los píxeles amarillos
-yellow_mask = cv2.inRange(hsv_image, lower_yellow, upper_yellow)
+    if contours:
+        largest_contour = max(contours, key=cv2.contourArea)
+        x, y, w, h = cv2.boundingRect(largest_contour)
+        plate_region = resized_image[y:y + h, x:x + w]
+        extended_detected_high_res = cv2.resize(plate_region, (1000, 400), interpolation=cv2.INTER_CUBIC)
+        kernel_sharpening = np.array([[-1, -1, -1],
+                                      [-1, 9, -1],
+                                      [-1, -1, -1]])
+        sharpened_image = cv2.filter2D(extended_detected_high_res, -1, kernel_sharpening)
 
-# Aplicar la máscara sobre la imagen original para obtener solo los píxeles amarillos
-yellow_detected = cv2.bitwise_and(resized_image, resized_image, mask=yellow_mask)
+        output_folder = "plate_detected"
+        os.makedirs(output_folder, exist_ok=True)
+        output_path = os.path.join(output_folder, "Plate_Enhanced.jpg")
+        cv2.imwrite(output_path, sharpened_image)
+        return output_path
 
-# Redimensionar la imagen con los píxeles amarillos detectados a 500x200
-yellow_detected_resized = cv2.resize(yellow_detected, (500, 200))
-
-# Expandir la máscara para incluir más área alrededor del amarillo
-kernel = np.ones((5, 5), np.uint8)  # Crear un kernel de 5x5 píxeles
-dilated_mask = cv2.dilate(yellow_mask, kernel, iterations=1)  # Dilatar la máscara
-
-# Aplicar la máscara dilatada sobre la imagen original para obtener los píxeles en el rango extendido
-extended_detected = cv2.bitwise_and(resized_image, resized_image, mask=dilated_mask)
-
-# Redimensionar la imagen con los píxeles detectados a 500x200
-extended_detected_resized = cv2.resize(extended_detected, (500, 200))
-
-# Mostrar la imagen original
-cv2.imshow("Original image", resized_image)
-
-# Mostrar la imagen en espacio HSV
-cv2.imshow("Processing", hsv_image)
-
-# Mostrar la imagen con el rango extendido alrededor del amarillo
-cv2.imshow("Plate", extended_detected_resized)
-
-# Esperar hasta que se presione una tecla para cerrar las ventanas
-cv2.waitKey(0)
-cv2.destroyAllWindows()
+    return None

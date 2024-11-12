@@ -2,7 +2,8 @@ import os
 from flask import Flask, request, jsonify, render_template, send_file
 from PIL import Image, ImageDraw
 from ultralytics import YOLO
-import test
+from process_plate import process_plate_image
+from characters_module import detect_plate_characters, correct_plate_text
 
 app = Flask(__name__)
 UPLOAD_FOLDER = 'uploads/'
@@ -10,7 +11,7 @@ OUTPUT_FOLDER = 'output/'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(OUTPUT_FOLDER, exist_ok=True)
 
-# Cargar el modelo YOLO
+# Modelo Yolov5 preentrenado para detectar objetos como carros o motocicletas (con o sin tripulante)
 model = YOLO('yolov5s.pt')
 
 
@@ -33,7 +34,6 @@ def upload_image():
 
     try:
         with Image.open(image_path) as img:
-            width, height = img.size
             format_ = img.format
 
         results = model(image_path)
@@ -44,6 +44,8 @@ def upload_image():
         detections = []
         motorcycles = []
         persons = []
+        cropped_image_path = None
+        plate_text = ''
 
         for result in results:
             for box in result.boxes:
@@ -63,7 +65,7 @@ def upload_image():
                         'confidence': confidence,
                         'bbox': bbox
                     })
-                    crop_and_save_image(img, bbox, label, image.filename)
+                    cropped_image_path = crop_and_save_image(img, bbox, label, image.filename)
 
         for motorcycle_bbox in motorcycles:
             for person_bbox in persons:
@@ -75,21 +77,18 @@ def upload_image():
                         'bbox': motorcycle_bbox
                     })
 
-        output_image_path = os.path.join(OUTPUT_FOLDER, f"detected_{image.filename}")
-        img.save(output_image_path)
-        plate = []
-        plate.append({
-            'plate': process_plate_module.plate_result()
-        })
+        plate_image_path = process_plate_image(cropped_image_path)
+
+        if plate_image_path is not None:
+            text = detect_plate_characters(plate_image_path)
+            if text is not None:
+                plate_text = correct_plate_text(text)
 
         return jsonify({
             'filename': image.filename,
-            'width': width,
-            'height': height,
             'format': format_,
             'detections': detections,
-            'processed_image': output_image_path,
-            'plate_processed': plate
+            'plate_text': plate_text
         })
 
     except Exception as e:
@@ -119,6 +118,7 @@ def crop_and_save_image(img, bbox, label, original_filename):
     cropped_img = img.crop((x1, y1, x2, y2))
     cropped_image_path = os.path.join(OUTPUT_FOLDER, f"crop_{label}_{x1}_{y1}_{x2}_{y2}_{original_filename}")
     cropped_img.save(cropped_image_path)
+    return cropped_image_path
 
 
 if __name__ == '__main__':
