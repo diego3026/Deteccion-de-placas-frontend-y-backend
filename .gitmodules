@@ -1,0 +1,3 @@
+[submodule "front_seminario"]
+	path = front_seminario
+	url = https://github.com/diego3026/Deteccion-de-placas-adulteradas-front.git
