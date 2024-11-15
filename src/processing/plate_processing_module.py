@@ -32,7 +32,7 @@ def process_plate_image(image_path):
                                       [-1, -1, -1]])
         sharpened_image = cv2.filter2D(extended_detected_high_res, -1, kernel_sharpening)
 
-        output_folder = "plate_detected"
+        output_folder = "processing/plate_detected"
         os.makedirs(output_folder, exist_ok=True)
         output_path = os.path.join(output_folder, "Plate_Enhanced.jpg")
         cv2.imwrite(output_path, sharpened_image)

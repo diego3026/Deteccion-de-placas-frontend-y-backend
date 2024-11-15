@@ -1,15 +1,22 @@
 import os
+import re
 from flask import Flask, request, jsonify, render_template, send_file
 from PIL import Image, ImageDraw
+from datetime import datetime
 from ultralytics import YOLO
-from process_plate import process_plate_image
-from characters_module import detect_plate_characters, correct_plate_text
+from src.database.database import Database
+from src.processing.plate_processing_module import process_plate_image
+from src.processing.characters_processing_module import detect_plate_characters, correct_plate_text
+from src.reports.report_module import generate_pdf_report
 
 app = Flask(__name__)
-UPLOAD_FOLDER = 'uploads/'
-OUTPUT_FOLDER = 'output/'
+UPLOAD_FOLDER = 'processing/uploads/'
+OUTPUT_FOLDER = 'processing/output/'
+PROCESSED_FOLDER = 'processing/plate_detected/'
+REPORTS_FOLDER= 'reports/generated/'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(OUTPUT_FOLDER, exist_ok=True)
+os.makedirs(PROCESSED_FOLDER, exist_ok=True)
 
 # Modelo Yolov5 preentrenado para detectar objetos como carros o motocicletas (con o sin tripulante)
 model = YOLO('models/yolov5s.pt')
@@ -78,30 +85,42 @@ def upload_image():
                     })
 
         plate_image_path = process_plate_image(cropped_image_path)
-
+        saved_plate_image_path = os.path.join(PROCESSED_FOLDER, "Plate_Enhanced.jpg")
         if plate_image_path is not None:
+            Image.open(plate_image_path).save(saved_plate_image_path)
             text = detect_plate_characters(plate_image_path)
             if text is not None:
                 plate_text = correct_plate_text(text)
 
+        filename_no_ext = re.sub(r"\.jpg$", "", image.filename, flags=re.IGNORECASE)
+        report_path = os.path.join(REPORTS_FOLDER, f"report_{filename_no_ext}.pdf")
+        generate_pdf_report(filename_no_ext, plate_text, image_path, saved_plate_image_path, report_path)
+        # Agregar report_path a la BD
+        db = Database(dbname="database", user="admin", password="12345")
+
+        # Inserta un documento
+        db.insertar_documento(filename_no_ext, report_path, datetime.now().strftime('%d/%m/%Y'))
+
+        # Inserta un documento
+        db.insertar_log("COMPLETO", "NO APLICA")
+
+        # Cierra la conexión cuando ya no la necesites
+        db.cerrar_conexion()
+
         return jsonify({
-            'filename': image.filename,
-            'format': format_,
-            'detections': detections,
-            'plate_text': plate_text
+            'message': 'Informe generado correctamente'
         })
 
     except Exception as e:
+        # Agregar report_path a la BD
+        db = Database(dbname="database", user="admin", password="12345")
+
+        # Inserta un documento
+        db.insertar_log("INCOMPLETO", str(e))
+
+        # Cierra la conexión cuando ya no la necesites
+        db.cerrar_conexion()
         return jsonify({'error': str(e)}), 500
-
-
-@app.route('/processed_image/<filename>', methods=['GET'])
-def download_image(filename):
-    image_path = os.path.join(OUTPUT_FOLDER, filename)
-    if os.path.exists(image_path):
-        return send_file(image_path)
-    else:
-        return jsonify({'error': 'Imagen no encontrada.'}), 404
 
 
 def is_person_on_motorcycle(person_bbox, motorcycle_bbox):
